@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Baltimore Commercial Places</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div id="layout">
+    <aside id="sidebar">
+      <header>
+        <h1>Baltimore Commercial Places</h1>
+        <p class="subtitle">Overture Maps · <span id="count">loading…</span></p>
+      </header>
+
+      <div class="controls">
+        <input id="search" type="search" placeholder="Search name, brand, address…" autocomplete="off"/>
+        <select id="category-filter">
+          <option value="">All categories</option>
+        </select>
+      </div>
+
+      <section id="detail" class="empty">
+        <p class="hint">Click a pin to see business details.</p>
+      </section>
+
+      <footer>
+        Tile data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ·
+        Place data &copy; <a href="https://overturemaps.org/">Overture Maps</a>
+      </footer>
+    </aside>
+
+    <main id="map"></main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# OS
+.DS_Store
+
+# Pipeline outputs (reproducible from src/main.py + src/export_geojson.py)
+data/*.parquet
+data/*.parquet.state
+data/*.geojson
+web/places.geojson
+*.duckdb
+*.duckdb.wal
+logs/*.log
+
+# IDE
+.vscode/
+.idea/
