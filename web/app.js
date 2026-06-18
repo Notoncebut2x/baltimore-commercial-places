@@ -72,6 +72,7 @@ function renderDetail(props) {
     <h2>${escapeHtml(props.name ?? "(unnamed)")}</h2>
     <span class="category">${escapeHtml(prettyCategory(props.category))}</span>
     <dl>
+      ${row("Group", escapeHtml(props.basic_category))}
       ${row("Subtype", escapeHtml(prettyCategory(props.subtype)))}
       ${row("Brand", escapeHtml(props.brand))}
       ${row("Address", escapeHtml(props.address))}
@@ -113,7 +114,7 @@ function applyFilters() {
   const cat = categoryEl.value;
   const filtered = allFeatures.filter(f => {
     const p = f.properties;
-    if (cat && p.category !== cat) return false;
+    if (cat && p.basic_category !== cat) return false;
     if (q) {
       const hay = `${p.name ?? ""} ${p.brand ?? ""} ${p.address ?? ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -126,15 +127,15 @@ function applyFilters() {
 function populateCategoryFilter() {
   const counts = new Map();
   for (const f of allFeatures) {
-    const c = f.properties.category;
+    const c = f.properties.basic_category;
     if (!c) continue;
     counts.set(c, (counts.get(c) ?? 0) + 1);
   }
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   for (const [c, n] of sorted) {
     const opt = document.createElement("option");
     opt.value = c;
-    opt.textContent = `${prettyCategory(c)} (${n.toLocaleString()})`;
+    opt.textContent = `${c} (${n.toLocaleString()})`;
     categoryEl.appendChild(opt);
   }
 }
