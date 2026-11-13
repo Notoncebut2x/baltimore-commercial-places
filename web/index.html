@@ -21,8 +21,19 @@
 
       <div class="controls">
         <input id="search" type="search" placeholder="Search name, brand, address…" autocomplete="off"/>
-        <select id="category-filter">
-          <option value="">All categories</option>
+        <select id="category-l1" aria-label="Category"></select>
+        <select id="category-l2" aria-label="Subcategory" disabled></select>
+        <select id="category-l3" aria-label="Sub-subcategory" disabled></select>
+        <div class="slider">
+          <label for="confidence-filter">
+            Min. confidence <output id="confidence-value" for="confidence-filter">90</output>
+          </label>
+          <input id="confidence-filter" type="range" min="0" max="100" step="1" value="90"/>
+          <p class="note">90+ recommended. Lower scores are more likely to be closed or duplicate listings.</p>
+        </div>
+        <select id="newness-filter">
+          <option value="all">All businesses</option>
+          <option value="new">New this release</option>
         </select>
       </div>
 

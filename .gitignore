@@ -21,3 +21,6 @@ logs/*.log
 # IDE
 .vscode/
 .idea/
+
+# Raw Overture downloads, one per release (kept: Overture deletes old releases)
+data/raw/

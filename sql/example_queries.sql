@@ -36,3 +36,18 @@ FROM commercial_places
 WHERE postcode IS NOT NULL
 GROUP BY postcode
 ORDER BY n DESC;
+
+-- 6. Businesses newly discovered in the most recent ETL run.
+--    first_seen_at is set on insert and preserved across upserts, so the
+--    rows with the latest first_seen_at are exactly the IDs not present
+--    in the previous run.
+SELECT name, category, address, first_seen_at
+FROM commercial_places
+WHERE first_seen_at = (SELECT MAX(first_seen_at) FROM commercial_places)
+ORDER BY category, name;
+
+-- 7. Businesses added in the last 30 days
+SELECT name, category, address, first_seen_at
+FROM commercial_places
+WHERE first_seen_at >= CURRENT_TIMESTAMP - INTERVAL 30 DAY
+ORDER BY first_seen_at DESC;

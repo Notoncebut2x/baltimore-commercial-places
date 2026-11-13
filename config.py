@@ -21,11 +21,16 @@ SQL_DIR: Final[Path] = PROJECT_ROOT / "sql"
 LOG_DIR: Final[Path] = PROJECT_ROOT / "logs"
 
 BOUNDARY_PATH: Final[Path] = DATA_DIR / "baltimore_boundary.geojson"
-RAW_PLACES_PARQUET: Final[Path] = DATA_DIR / "overture_places_raw.parquet"
+# One raw parquet per Overture release: overture_places_<release>.parquet.
+# Old releases are kept because Overture deletes them from S3 after ~60 days.
+RAW_PLACES_DIR: Final[Path] = DATA_DIR / "raw"
 CLEAN_PLACES_PARQUET: Final[Path] = DATA_DIR / "commercial_places.parquet"
+CLOSED_PLACES_PARQUET: Final[Path] = DATA_DIR / "closed_places.parquet"
 
 DUCKDB_PATH: Final[Path] = PROJECT_ROOT / "baltimore_commercial_places.duckdb"
 DUCKDB_TABLE: Final[str] = "commercial_places"
+# Permanently closed places. Kept for history, never exported to the map.
+DUCKDB_CLOSED_TABLE: Final[str] = "closed_places"
 
 # ---------------------------------------------------------------------------
 # Overture release
@@ -62,39 +67,34 @@ CRS_WGS84: Final[str] = "EPSG:4326"
 # ---------------------------------------------------------------------------
 # Commercial category filter
 # ---------------------------------------------------------------------------
-# Overture's `categories.primary` field is the LEAF in the category taxonomy
-# (e.g. "restaurant", "grocery_store", "barber") rather than a dotted path.
-# With ~2000+ leaf values, an allow-list is fragile; instead we use an
-# exclude-list of leaves that are clearly non-commercial (parks, landmarks,
-# government, infrastructure) plus prefix patterns for whole excluded
-# families. Rows missing a name or category are dropped upstream.
-# See https://github.com/OvertureMaps/schema/blob/main/task-force-docs/places/overture_categories.csv
-
-EXCLUDED_CATEGORIES: Final[frozenset[str]] = frozenset({
-    # parks / open space / natural features
-    "park", "national_park", "state_park", "dog_park", "playground",
-    "public_plaza", "cemetery", "forest", "beach", "lake", "river",
-    "mountain", "garden", "botanical_garden",
-    # landmarks / monuments
-    "landmark_and_historical_building", "monument", "statue", "historic_site",
-    # transport infrastructure
-    "parking", "parking_lot", "parking_garage", "rest_area",
-    "bridge", "tunnel", "intersection", "bus_stop", "train_station",
-    "subway_station", "transit_station",
-    # government / civic
-    "government_office", "city_hall", "town_hall", "courthouse",
-    "post_office", "police_station", "fire_station",
-    "public_and_government_association",
-})
-
-# Any leaf whose name starts with one of these prefixes is also dropped.
-# Catches families like "government_*", "public_*_infrastructure", etc.
-EXCLUDED_CATEGORY_PREFIXES: Final[tuple[str, ...]] = (
-    "government_",
-    "public_transportation",
-    "civic_",
-    "military_",
+# Places are matched on Overture's `taxonomy.hierarchy` path, written as
+# "level1/level2/level3". Each entry drops that node and everything beneath
+# it, e.g. "sports_and_recreation/park" drops parks, dog parks, playgrounds...
+# Everything not listed is kept as commercial / customer-facing. Places with
+# no taxonomy at all are dropped.
+# Taxonomy reference: https://docs.overturemaps.org/guides/places/
+EXCLUDED_TAXONOMY_PATHS: Final[tuple[str, ...]] = (
+    "community_and_government/government_office",
+    "community_and_government/public_safety_service",
+    "community_and_government/public_facility",
+    "community_and_government/military_site",
+    "cultural_and_historic/historic_site",
+    "cultural_and_historic/memorial_site",
+    "geographic_entities",
+    "sports_and_recreation/park",
+    "sports_and_recreation/recreational_trail_or_path",
+    "travel_and_transportation/parking",
+    "travel_and_transportation/ground_transport_facility_or_service/rail_facility_or_service",
+    "services_and_business/shipping_or_delivery_service/post_office",
 )
+
+# ---------------------------------------------------------------------------
+# Confidence filter
+# ---------------------------------------------------------------------------
+# Overture's `confidence` (0-1) estimates how likely a place is to exist.
+# Rows below this threshold are dropped in the transform step, so it can be
+# re-tuned with `--skip-download` without re-fetching the raw parquet.
+MIN_CONFIDENCE: Final[float] = float(os.environ.get("MIN_CONFIDENCE", "0.5"))
 
 # ---------------------------------------------------------------------------
 # Runtime tuning

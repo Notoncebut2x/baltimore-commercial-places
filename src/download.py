@@ -10,6 +10,10 @@ The CLI:
 * writes a GeoParquet file with the same nested Overture struct columns
   that :mod:`transform` expects.
 
+Each release is kept as its own file, ``data/raw/overture_places_<release>.parquet``.
+Overture deletes releases from S3 after ~60 days, so these local copies are
+the only way to re-run the pipeline against an older release later.
+
 We shell out instead of binding the library directly because the CLI is the
 maintained, supported interface and isolates us from API churn between
 ``overturemaps-py`` releases.
@@ -17,6 +21,7 @@ maintained, supported interface and isolates us from API churn between
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -31,10 +36,40 @@ from config import (
     DOWNLOAD_MAX_RETRIES,
     DOWNLOAD_RETRY_BACKOFF_SECONDS,
     OVERTURE_RELEASE,
-    RAW_PLACES_PARQUET,
+    RAW_PLACES_DIR,
 )
 
 log = logging.getLogger(__name__)
+
+_RAW_PREFIX = "overture_places_"
+
+# click exits with status 2 on a usage error (e.g. a release that no longer
+# exists). Retrying those can't succeed, so fail immediately.
+_CLI_USAGE_ERROR = 2
+
+
+def raw_places_path(release: str, raw_dir: Path = RAW_PLACES_DIR) -> Path:
+    """Path of the raw parquet for one Overture release."""
+    return raw_dir / f"{_RAW_PREFIX}{release}.parquet"
+
+
+def downloaded_releases(raw_dir: Path = RAW_PLACES_DIR) -> list[str]:
+    """Releases with a raw parquet on disk, newest first.
+
+    Release ids are "YYYY-MM-DD.N", so string order is chronological.
+    """
+    if not raw_dir.exists():
+        return []
+    return sorted(
+        (p.name[len(_RAW_PREFIX):-len(".parquet")]
+         for p in raw_dir.glob(f"{_RAW_PREFIX}*.parquet")),
+        reverse=True,
+    )
+
+
+def _pinned_release() -> str | None:
+    """OVERTURE_RELEASE from the env or config; empty means "latest"."""
+    return os.environ.get("OVERTURE_RELEASE", OVERTURE_RELEASE) or None
 
 
 def _build_command(
@@ -55,32 +90,55 @@ def _build_command(
     return cmd
 
 
+def _release_from_state(output_path: Path) -> str:
+    """Read the release the CLI actually downloaded from its ``.state`` file."""
+    state_path = Path(f"{output_path}.state")
+    try:
+        release = json.loads(state_path.read_text())["last_release"]
+    except (OSError, ValueError, KeyError) as err:
+        raise RuntimeError(
+            f"could not read the downloaded release from {state_path}: {err}"
+        ) from err
+    state_path.unlink()
+    return release
+
+
 def download_places(
-    output_path: Path = RAW_PLACES_PARQUET,
     bbox: tuple[float, float, float, float] = BALTIMORE_BBOX,
     release: str | None = None,
-) -> Path:
-    """Download Overture places for the given bbox into a local GeoParquet file.
+    raw_dir: Path = RAW_PLACES_DIR,
+) -> tuple[str, Path]:
+    """Download Overture places for the bbox; returns (release, parquet_path).
 
-    ``release`` defaults to the ``OVERTURE_RELEASE`` env var (set via config).
-    If the env var is unset or the empty string, the CLI's built-in "latest"
-    is used - safer than pinning a release that may not exist yet.
-
-    Returns the path to the written parquet file. Retries on transient errors.
+    ``release`` defaults to ``OVERTURE_RELEASE`` (env var or config). If that
+    is empty, the latest release is downloaded. A release that is already on
+    disk is not downloaded again, since Overture releases never change.
+    Earlier releases' files are left in place. Retries on transient errors.
     """
     if shutil.which("overturemaps") is None:
         raise RuntimeError(
-            "overturemaps CLI not found on PATH; run `pip install -r requirements.txt`"
+            "overturemaps CLI not found on PATH; activate the virtualenv "
+            "(`source .venv/bin/activate`) or run `pip install -r requirements.txt`"
         )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    release = release or _pinned_release()
     if release is None:
-        # Allow OVERTURE_RELEASE='' to mean "latest".
-        env_release = os.environ.get("OVERTURE_RELEASE", OVERTURE_RELEASE)
-        release = env_release or None
+        from overturemaps.releases import get_latest_release
+        latest = get_latest_release()
+        if raw_places_path(latest, raw_dir).exists():
+            log.info("latest release %s is already downloaded", latest)
+            return latest, raw_places_path(latest, raw_dir)
+        log.info("latest Overture release is %s", latest)
+        release = latest
+    elif raw_places_path(release, raw_dir).exists():
+        log.info("release %s is already downloaded", release)
+        return release, raw_places_path(release, raw_dir)
 
-    cmd = _build_command(bbox, output_path, release)
+    # Download to a temporary name so a failed or interrupted run never
+    # leaves a partial file that looks like a complete release.
+    tmp_path = raw_dir / f"{_RAW_PREFIX}download.parquet.partial"
+    cmd = _build_command(bbox, tmp_path, release)
     log.info("running: %s", " ".join(cmd))
 
     last_err: Exception | None = None
@@ -99,18 +157,27 @@ def download_places(
                 log.debug("overturemaps stdout: %s", result.stdout.strip())
             if result.stderr.strip():
                 log.debug("overturemaps stderr: %s", result.stderr.strip())
-            if not output_path.exists() or output_path.stat().st_size == 0:
+            if not tmp_path.exists() or tmp_path.stat().st_size == 0:
                 raise RuntimeError(
-                    f"overturemaps reported success but {output_path} is missing/empty"
+                    f"overturemaps reported success but {tmp_path} is missing/empty"
                 )
+            # Cross-check against the CLI's own record of what it fetched.
+            downloaded = _release_from_state(tmp_path)
+            output_path = raw_places_path(downloaded, raw_dir)
+            tmp_path.replace(output_path)
             log.info(
-                "download complete in %.1fs (%.1f MB)",
+                "download complete in %.1fs (%.1f MB), release %s -> %s",
                 elapsed, output_path.stat().st_size / (1024 * 1024),
+                downloaded, output_path,
             )
-            return output_path
+            return downloaded, output_path
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError) as err:
             last_err = err
             stderr = getattr(err, "stderr", "") or ""
+            if getattr(err, "returncode", None) == _CLI_USAGE_ERROR:
+                raise RuntimeError(
+                    f"overturemaps rejected the request: {stderr.strip()[:500]}"
+                ) from err
             sleep_for = DOWNLOAD_RETRY_BACKOFF_SECONDS * attempt
             log.warning(
                 "overture download attempt %d/%d failed: %s%s; retrying in %.1fs",
@@ -125,8 +192,8 @@ def download_places(
     ) from last_err
 
 
-def count_raw_rows(parquet_path: Path = RAW_PLACES_PARQUET) -> int:
-    """Return the row count of the downloaded raw parquet."""
+def count_raw_rows(parquet_path: Path) -> int:
+    """Return the row count of a downloaded raw parquet."""
     con = duckdb.connect()
     try:
         return con.execute(
