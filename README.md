@@ -111,6 +111,22 @@ From the project root, with the virtualenv active (`source .venv/bin/activate`):
 
    Then open <http://localhost:8000>. Stop the server with Ctrl+C.
 
+## Publish the map to GitHub Pages
+
+`web/places.geojson` isn't committed (it's ~14 MB and changes every refresh).
+Instead it's uploaded as an asset on a GitHub Release tagged `map-data`, and
+the Pages workflow (`.github/workflows/deploy-pages.yml`) downloads it at
+deploy time. After exporting:
+
+```bash
+python src/publish_map_data.py              # upload places.geojson + redeploy the site
+python src/publish_map_data.py --no-deploy  # upload only
+gh run watch                                # follow the deploy
+```
+
+This needs the GitHub CLI (`gh`) logged in with push access. Pushing changes
+under `web/` to `main` also redeploys, using whatever file was last uploaded.
+
 ## Editing the category filter
 
 The commercial filter works on Overture's category taxonomy

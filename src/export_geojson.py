@@ -1,7 +1,8 @@
 """Export commercial_places from DuckDB to web/places.geojson for the map UI.
 
-The exporter only includes columns the front-end needs, which keeps the file
-size down (~5 MB for 25k Baltimore places). Run via:
+The exporter only includes columns the front-end needs and keeps values
+lean (empty fields omitted, coordinates rounded, dates without times), which
+keeps the file around 11 MB for ~26k Baltimore places. Run via:
 
     python src/export_geojson.py                       # MIN_CONFIDENCE from config.py
     python src/export_geojson.py --min-confidence 0.8  # custom threshold
@@ -28,6 +29,9 @@ log = logging.getLogger(__name__)
 
 OUTPUT_PATH: Path = PROJECT_ROOT / "web" / "places.geojson"
 
+# 5 decimal places is ~1 m, well below what a map pin can show.
+COORD_DECIMALS = 5
+
 # is_new flags rows that share the latest first_seen_at — i.e. the IDs that
 # only appeared in the most recent ETL run. Guarded by a "more than one
 # distinct first_seen_at exists" check so a fresh DB (where every row shares
@@ -39,8 +43,9 @@ OUTPUT_PATH: Path = PROJECT_ROOT / "web" / "places.geojson"
 _EXPORT_SQL = f"""
 SELECT
     id, name, category, category_l1, category_l2, category_l3, basic_category, subtype, address, postcode,
-    phone, email, website, brand, source_dataset, confidence, latitude, longitude,
-    CAST(first_seen_at AS VARCHAR) AS first_seen_at,
+    phone, email, website, brand, source_dataset,
+    ROUND(confidence, 2) AS confidence, latitude, longitude,
+    CAST(CAST(first_seen_at AS DATE) AS VARCHAR) AS first_seen_at,
     (
         first_seen_at = (SELECT MAX(first_seen_at) FROM {DUCKDB_TABLE})
         AND (SELECT COUNT(DISTINCT first_seen_at) FROM {DUCKDB_TABLE}) > 1
@@ -73,10 +78,16 @@ def export(
     for row in rows:
         rec = dict(zip(cols, row))
         lon, lat = rec.pop("longitude"), rec.pop("latitude")
+        # Drop empty fields and is_new=false; the front-end treats a missing
+        # property the same as null/false.
+        props = {k: v for k, v in rec.items() if v is not None and v is not False}
         features.append({
             "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [lon, lat]},
-            "properties": rec,
+            "geometry": {
+                "type": "Point",
+                "coordinates": [round(lon, COORD_DECIMALS), round(lat, COORD_DECIMALS)],
+            },
+            "properties": props,
         })
 
     fc = {"type": "FeatureCollection", "features": features}

@@ -26,6 +26,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # places.geojson isn't committed; src/publish_map_data.py uploads it to
+      # the map-data release, and we pull it into web/ before publishing.
+      - name: Fetch map data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release download map-data
+          --repo "${{ github.repository }}"
+          --pattern places.geojson --dir web --clobber
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
