@@ -16,7 +16,7 @@ timezone: America/New_York
 
 title: Baltimore Commercial Places # the main title
 
-tagline: Mapping every storefront, restaurant and service in Baltimore City from Overture Maps # it will display as the subtitle
+tagline: Shops, restaurants and services across the city # it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   An interactive map and table of commercial places in Baltimore City,
