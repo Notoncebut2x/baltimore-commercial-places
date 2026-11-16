@@ -1,7 +1,7 @@
 name: Deploy site to GitHub Pages
 
 # Builds the Chirpy (Jekyll) site in site/, then adds the Leaflet map from
-# web/ at /map/ so the site's Map tab can embed it.
+# web/ at /app/ so the site's Map tab (/map/) can embed it.
 
 on:
   push:
@@ -52,17 +52,19 @@ jobs:
           JEKYLL_ENV: production
 
       # places.geojson isn't committed; src/publish_map_data.py uploads it to
-      # the map-data release, and we pull it in next to the map.
-      - name: Add map
+      # the map-data release, and we pull it in next to the app.
+      - name: Add map app
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          MAP_DIR="_site${{ steps.pages.outputs.base_path }}/map"
-          mkdir -p "$MAP_DIR"
-          cp -R ../web/. "$MAP_DIR"
+          APP_DIR="_site${{ steps.pages.outputs.base_path }}/app"
+          # Fail rather than overwrite a Jekyll page with the same path.
+          if [ -e "$APP_DIR" ]; then echo "::error::$APP_DIR already exists"; exit 1; fi
+          mkdir -p "$APP_DIR"
+          cp -R ../web/. "$APP_DIR"
           gh release download map-data \
             --repo "${{ github.repository }}" \
-            --pattern places.geojson --dir "$MAP_DIR" --clobber
+            --pattern places.geojson --dir "$APP_DIR" --clobber
 
       - name: Test site
         run: >

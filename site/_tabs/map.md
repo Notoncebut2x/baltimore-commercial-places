@@ -6,9 +6,9 @@ order: 1
 Search by name, brand or address, narrow by category, and switch to the
 **Table** tab to sort the results or export them as CSV or GeoJSON.
 
-<iframe class="places-map" src="{{ '/map/' | relative_url }}" title="Baltimore commercial places map" loading="lazy"></iframe>
+<iframe class="places-map" src="{{ '/app/' | relative_url }}" title="Baltimore commercial places map" loading="lazy"></iframe>
 
-<a href="{{ '/map/' | relative_url }}" target="_blank" rel="noopener">Open the map full screen <i class="fas fa-up-right-from-square fa-xs"></i></a>
+<a href="{{ '/app/' | relative_url }}" target="_blank" rel="noopener">Open the map full screen <i class="fas fa-up-right-from-square fa-xs"></i></a>
 
 <style>
   .places-map {

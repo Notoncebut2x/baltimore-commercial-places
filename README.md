@@ -116,7 +116,7 @@ From the project root, with the virtualenv active (`source .venv/bin/activate`):
 The public site (<https://notoncebut2x.github.io/baltimore-commercial-places/>)
 is a [Chirpy](https://github.com/cotes2020/jekyll-theme-chirpy) Jekyll site in
 `site/`. The Pages workflow (`.github/workflows/deploy-pages.yml`) builds it and
-copies the map from `web/` to `/map/`, which the site's Map tab embeds. Edit
+copies the map from `web/` to `/app/`, which the site's Map tab embeds. Edit
 the About page in `site/_tabs/about.md` and add posts under `site/_posts/`.
 
 `web/places.geojson` isn't committed (it's ~14 MB and changes every refresh).
