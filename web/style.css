@@ -94,7 +94,109 @@ html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystem
 }
 #sidebar footer a { color: #2563eb; text-decoration: none; }
 
-#map { height: 100vh; }
+#main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+}
+#map { flex: 1; }
+#map[hidden], #table-view[hidden] { display: none; }
+
+#view-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+#view-tabs button {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+}
+#view-tabs button:hover { background: #f3f4f6; }
+#view-tabs button[aria-selected="true"] { background: #eef2ff; color: #3730a3; font-weight: 600; }
+
+#table-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.table-scroll { flex: 1; overflow: auto; }
+#places-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+#places-table th {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  border-bottom: 1px solid #d0d0d0;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+#places-table th:hover { background: #f0f0f0; }
+#places-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  vertical-align: top;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#places-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+#places-table tbody tr { cursor: pointer; }
+#places-table tbody tr:hover { background: #f8fafc; }
+#places-table tbody tr.selected { background: #eef2ff; }
+#places-table td.hint { color: #888; text-align: center; padding: 40px; cursor: default; }
+#places-table a { color: #2563eb; text-decoration: none; }
+#places-table a:hover { text-decoration: underline; }
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid #e0e0e0;
+  background: #fff;
+  font-size: 13px;
+  color: #555;
+}
+#page-info { font-variant-numeric: tabular-nums; }
+
+.pager button,
+.controls .export button,
+#places-table .locate {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 10px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: #fff;
+  color: #1a1a1a;
+  cursor: pointer;
+}
+#places-table .locate { font-size: 12px; padding: 2px 8px; }
+.pager button:hover:not(:disabled),
+.controls .export button:hover,
+#places-table .locate:hover { background: #f3f4f6; }
+.pager button:disabled { color: #aaa; cursor: default; }
+.controls .export { display: flex; gap: 8px; }
+.controls .export button { flex: 1; }
 
 /* Override Leaflet's default divIcon white box for the red "new" pin. */
 .new-marker {
@@ -118,7 +220,7 @@ html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystem
 @media (max-width: 720px) {
   #layout { grid-template-columns: 1fr; grid-template-rows: 40vh 60vh; }
   #sidebar { border-right: none; border-bottom: 1px solid #e0e0e0; }
-  #map { height: 60vh; }
+  #main { height: 60vh; }
 }
 .controls select:disabled { color: #aaa; background: #f5f5f5; }
 .controls .slider { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }

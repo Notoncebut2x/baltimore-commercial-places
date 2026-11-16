@@ -2,7 +2,8 @@
  * Loads places.geojson, renders clustered markers on a Leaflet map, and
  * populates the sidebar with business details when a marker is clicked.
  * Search + a three-level taxonomy filter (e.g. Food And Drink > Restaurant >
- * Asian Restaurant) rebuild the cluster layer in place.
+ * Asian Restaurant) rebuild the cluster layer in place. The same filtered
+ * set drives a sortable, paginated table view and CSV/GeoJSON export.
  */
 "use strict";
 
@@ -52,7 +53,11 @@ const NEW_ICON = L.divIcon({
 });
 
 let allFeatures = [];
+let filteredFeatures = [];
 let activeMarker = null;
+// Marker for each currently-filtered feature, keyed by Overture ID, so a
+// table row can locate its pin.
+let markersById = new Map();
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -143,6 +148,7 @@ function makeMarker(feature, useRedPin) {
 function rebuildLayer(features, useRedPins) {
   cluster.clearLayers();
   const markers = features.map(f => makeMarker(f, useRedPins));
+  markersById = new Map(markers.map(m => [m.featureProps.id, m]));
   cluster.addLayers(markers);
   countEl.textContent = `${features.length.toLocaleString()} places`;
 }
@@ -162,7 +168,10 @@ function applyFilters() {
     }
     return true;
   });
+  filteredFeatures = filtered;
   rebuildLayer(filtered, newness === "new");
+  tablePage = 0;
+  renderTable();
 }
 
 // True if the feature matches the selected value at every level above `depth`.
@@ -203,6 +212,174 @@ function onCategoryChange(i) {
   for (let j = i + 1; j < LEVELS.length; j++) populateLevel(j);
   applyFilters();
 }
+
+// ---- Map / table view ------------------------------------------------------
+
+const tableViewEl = document.getElementById("table-view");
+const mapEl = document.getElementById("map");
+const theadEl = document.querySelector("#places-table thead");
+const tbodyEl = document.querySelector("#places-table tbody");
+const pageInfoEl = document.getElementById("page-info");
+const pagePrevEl = document.getElementById("page-prev");
+const pageNextEl = document.getElementById("page-next");
+const tabEls = document.querySelectorAll("#view-tabs [data-view]");
+
+const PAGE_SIZE = 100;
+// `value` is the raw sort key; `render` returns cell HTML (defaults to the
+// escaped value).
+const TABLE_COLUMNS = [
+  { key: "name", label: "Name", value: p => (p.name ?? "").trim(),
+    render: p => escapeHtml(p.name ?? "(unnamed)") + (p.is_new ? ` <span class="new-badge">NEW</span>` : "") },
+  { key: "category", label: "Category", value: p => categoryPath(p) },
+  { key: "address", label: "Address", value: p => p.address ?? "" },
+  { key: "postcode", label: "ZIP", value: p => p.postcode ?? "" },
+  { key: "phone", label: "Phone", value: p => p.phone ?? "", render: p => telLink(p.phone) },
+  { key: "website", label: "Website", value: p => p.website ?? "", render: p => linkify(p.website) },
+  { key: "confidence", label: "Conf.", numeric: true,
+    value: p => p.confidence ?? -1,
+    render: p => p.confidence == null ? "" : String(Math.round(p.confidence * 100)) },
+  { key: "first_seen_at", label: "First seen", value: p => p.first_seen_at ?? "" },
+];
+
+let currentView = "map";
+let tablePage = 0;
+let sortKey = "name";
+let sortDir = 1;  // 1 ascending, -1 descending
+
+function sortedFeatures() {
+  const col = TABLE_COLUMNS.find(c => c.key === sortKey);
+  const cmp = col.numeric
+    ? (a, b) => a - b
+    : (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
+  return [...filteredFeatures].sort((fa, fb) => {
+    const a = col.value(fa.properties), b = col.value(fb.properties);
+    // Empty strings sort last regardless of direction.
+    if (!col.numeric && (a === "") !== (b === "")) return a === "" ? 1 : -1;
+    return sortDir * cmp(a, b);
+  });
+}
+
+function renderTableHead() {
+  theadEl.innerHTML = `<tr>${TABLE_COLUMNS.map(c => {
+    const arrow = c.key === sortKey ? (sortDir === 1 ? " ▲" : " ▼") : "";
+    const aria = c.key === sortKey ? (sortDir === 1 ? "ascending" : "descending") : "none";
+    return `<th data-key="${c.key}" aria-sort="${aria}"${c.numeric ? ' class="num"' : ""}>${c.label}${arrow}</th>`;
+  }).join("")}<th></th></tr>`;
+}
+
+function renderTable() {
+  if (currentView !== "table") return;
+  renderTableHead();
+  const rows = sortedFeatures();
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  tablePage = Math.min(tablePage, pages - 1);
+  const start = tablePage * PAGE_SIZE;
+  const pageRows = rows.slice(start, start + PAGE_SIZE);
+
+  tbodyEl.innerHTML = pageRows.map(f => {
+    const p = f.properties;
+    const cells = TABLE_COLUMNS.map(c => {
+      const html = c.render ? c.render(p) : escapeHtml(c.value(p));
+      return `<td${c.numeric ? ' class="num"' : ""}>${html}</td>`;
+    }).join("");
+    return `<tr data-id="${escapeHtml(p.id)}">${cells}` +
+      `<td><button type="button" class="locate">Map</button></td></tr>`;
+  }).join("") || `<tr><td colspan="${TABLE_COLUMNS.length + 1}" class="hint">No places match the current filters.</td></tr>`;
+
+  pageInfoEl.textContent = rows.length
+    ? `${(start + 1).toLocaleString()}–${(start + pageRows.length).toLocaleString()} of ${rows.length.toLocaleString()}`
+    : "0 places";
+  pagePrevEl.disabled = tablePage === 0;
+  pageNextEl.disabled = tablePage >= pages - 1;
+}
+
+function setView(view) {
+  currentView = view;
+  tabEls.forEach(t => t.setAttribute("aria-selected", String(t.dataset.view === view)));
+  mapEl.hidden = view !== "map";
+  tableViewEl.hidden = view !== "table";
+  if (view === "map") map.invalidateSize();
+  else renderTable();
+}
+
+function locateOnMap(id) {
+  const m = markersById.get(id);
+  if (!m) return;
+  setView("map");
+  activeMarker = m;
+  renderDetail(m.featureProps);
+  cluster.zoomToShowLayer(m, () => m.openTooltip());
+}
+
+tabEls.forEach(t => t.addEventListener("click", () => setView(t.dataset.view)));
+theadEl.addEventListener("click", e => {
+  const th = e.target.closest("th[data-key]");
+  if (!th) return;
+  if (th.dataset.key === sortKey) sortDir = -sortDir;
+  else { sortKey = th.dataset.key; sortDir = 1; }
+  tablePage = 0;
+  renderTable();
+});
+tbodyEl.addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-id]");
+  if (!tr || e.target.closest("a")) return;
+  if (e.target.closest(".locate")) { locateOnMap(tr.dataset.id); return; }
+  tbodyEl.querySelector("tr.selected")?.classList.remove("selected");
+  tr.classList.add("selected");
+  renderDetail(markersById.get(tr.dataset.id).featureProps);
+});
+pagePrevEl.addEventListener("click", () => { tablePage--; renderTable(); tableViewEl.querySelector(".table-scroll").scrollTop = 0; });
+pageNextEl.addEventListener("click", () => { tablePage++; renderTable(); tableViewEl.querySelector(".table-scroll").scrollTop = 0; });
+
+// ---- Export -----------------------------------------------------------------
+
+const EXPORT_COLUMNS = [
+  "id", "name", "category", "category_l1", "category_l2", "category_l3",
+  "basic_category", "subtype", "brand", "address", "postcode", "phone",
+  "email", "website", "source_dataset", "confidence", "first_seen_at", "is_new",
+];
+
+// Quote every field, and neutralise values a spreadsheet would run as a
+// formula. Phone numbers like "+1 410…" are left alone.
+function csvCell(v) {
+  let s = v == null ? "" : String(v);
+  if (/^[=@\t\r]/.test(s) || /^[+-][^0-9 (]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function download(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportBasename() {
+  return `baltimore-places-${new Date().toISOString().slice(0, 10)}`;
+}
+
+function exportCsv() {
+  const header = [...EXPORT_COLUMNS, "latitude", "longitude"];
+  const lines = [header.map(csvCell).join(",")];
+  for (const f of sortedFeatures()) {
+    const p = f.properties;
+    const [lon, lat] = f.geometry.coordinates;
+    lines.push([...EXPORT_COLUMNS.map(k => k === "is_new" ? Boolean(p.is_new) : p[k]), lat, lon]
+      .map(csvCell).join(","));
+  }
+  // BOM so Excel opens it as UTF-8.
+  download(`${exportBasename()}.csv`, "\uFEFF" + lines.join("\r\n"), "text/csv;charset=utf-8");
+}
+
+function exportGeojson() {
+  const fc = { type: "FeatureCollection", features: sortedFeatures() };
+  download(`${exportBasename()}.geojson`, JSON.stringify(fc), "application/geo+json");
+}
+
+document.getElementById("export-csv").addEventListener("click", exportCsv);
+document.getElementById("export-geojson").addEventListener("click", exportGeojson);
 
 let searchTimer = null;
 searchEl.addEventListener("input", () => {

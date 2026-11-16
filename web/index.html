@@ -35,6 +35,10 @@
           <option value="all">All businesses</option>
           <option value="new">New this release</option>
         </select>
+        <div class="export">
+          <button id="export-csv" type="button">Export CSV</button>
+          <button id="export-geojson" type="button">Export GeoJSON</button>
+        </div>
       </div>
 
       <section id="detail" class="empty">
@@ -47,7 +51,26 @@
       </footer>
     </aside>
 
-    <main id="map"></main>
+    <main id="main">
+      <nav id="view-tabs" role="tablist">
+        <button type="button" role="tab" data-view="map" aria-selected="true">Map</button>
+        <button type="button" role="tab" data-view="table" aria-selected="false">Table</button>
+      </nav>
+      <div id="map"></div>
+      <div id="table-view" hidden>
+        <div class="table-scroll">
+          <table id="places-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="page-prev" type="button">‹ Prev</button>
+          <span id="page-info"></span>
+          <button id="page-next" type="button">Next ›</button>
+        </div>
+      </div>
+    </main>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
