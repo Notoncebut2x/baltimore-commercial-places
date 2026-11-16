@@ -113,6 +113,12 @@ From the project root, with the virtualenv active (`source .venv/bin/activate`):
 
 ## Publish the map to GitHub Pages
 
+The public site (<https://notoncebut2x.github.io/baltimore-commercial-places/>)
+is a [Chirpy](https://github.com/cotes2020/jekyll-theme-chirpy) Jekyll site in
+`site/`. The Pages workflow (`.github/workflows/deploy-pages.yml`) builds it and
+copies the map from `web/` to `/map/`, which the site's Map tab embeds. Edit
+the About page in `site/_tabs/about.md` and add posts under `site/_posts/`.
+
 `web/places.geojson` isn't committed (it's ~14 MB and changes every refresh).
 Instead it's uploaded as an asset on a GitHub Release tagged `map-data`, and
 the Pages workflow (`.github/workflows/deploy-pages.yml`) downloads it at
@@ -125,7 +131,8 @@ gh run watch                                # follow the deploy
 ```
 
 This needs the GitHub CLI (`gh`) logged in with push access. Pushing changes
-under `web/` to `main` also redeploys, using whatever file was last uploaded.
+under `web/` or `site/` to `main` also redeploys, using whatever file was last
+uploaded.
 
 ## Editing the category filter
 

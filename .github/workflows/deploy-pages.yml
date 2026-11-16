@@ -1,9 +1,13 @@
-name: Deploy web/ to GitHub Pages
+name: Deploy site to GitHub Pages
+
+# Builds the Chirpy (Jekyll) site in site/, then adds the Leaflet map from
+# web/ at /map/ so the site's Map tab can embed it.
 
 on:
   push:
     branches: [main]
     paths:
+      - "site/**"
       - "web/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
@@ -19,25 +23,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Chirpy's lastmod hook reads post history from git.
+          fetch-depth: 0
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: site
+
+      # Build into _site/<base path> so html-proofer can resolve the
+      # site-absolute links Chirpy generates.
+      - name: Build site
+        run: bundle exec jekyll build -d "_site${{ steps.pages.outputs.base_path }}"
+        env:
+          JEKYLL_ENV: production
+
+      # places.geojson isn't committed; src/publish_map_data.py uploads it to
+      # the map-data release, and we pull it in next to the map.
+      - name: Add map
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MAP_DIR="_site${{ steps.pages.outputs.base_path }}/map"
+          mkdir -p "$MAP_DIR"
+          cp -R ../web/. "$MAP_DIR"
+          gh release download map-data \
+            --repo "${{ github.repository }}" \
+            --pattern places.geojson --dir "$MAP_DIR" --clobber
+
+      - name: Test site
+        run: >
+          bundle exec htmlproofer _site
+          --disable-external
+          --ignore-urls "/^http:\/\/127.0.0.1/,/^http:\/\/0.0.0.0/,/^http:\/\/localhost/"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: "site/_site${{ steps.pages.outputs.base_path }}"
+
   deploy:
+    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # places.geojson isn't committed; src/publish_map_data.py uploads it to
-      # the map-data release, and we pull it into web/ before publishing.
-      - name: Fetch map data
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release download map-data
-          --repo "${{ github.repository }}"
-          --pattern places.geojson --dir web --clobber
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
       - id: deployment
         uses: actions/deploy-pages@v4
